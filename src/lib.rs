@@ -46,6 +46,9 @@
 /// and coordination between different components.
 pub mod app;
 
+/// JSON CLI for the SimDeck app (the TUI stays the default when no subcommand is given).
+pub mod cli;
+
 /// Application-wide constants and configuration values.
 ///
 /// Includes Android SDK paths, command names, environment variables,

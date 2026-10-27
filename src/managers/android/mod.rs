@@ -419,6 +419,26 @@ impl AndroidManager {
         })
     }
 
+    /// Android SDK root the manager resolved from the environment.
+    pub fn android_home(&self) -> &Path {
+        &self.android_home
+    }
+
+    /// `avdmanager` binary the manager calls.
+    pub fn avdmanager_path(&self) -> &Path {
+        &self.avdmanager_path
+    }
+
+    /// `emulator` binary the manager calls.
+    pub fn emulator_path(&self) -> &Path {
+        &self.emulator_path
+    }
+
+    /// `sdkmanager` binary, when the SDK ships one.
+    pub fn sdkmanager_path(&self) -> Option<PathBuf> {
+        Self::find_tool(&self.android_home, commands::SDKMANAGER).ok()
+    }
+
     pub(crate) async fn get_cached_available_targets(&self) -> Option<Vec<(String, String)>> {
         let cache = self.available_targets_cache.read().await;
         cache.as_ref().and_then(|cache| {

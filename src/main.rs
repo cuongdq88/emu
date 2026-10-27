@@ -70,6 +70,14 @@ struct Cli {
     /// Use this before launching the TUI to validate local setup.
     #[arg(long)]
     check: bool,
+
+    /// Print JSON instead of drawing the TUI. Implied by any subcommand.
+    #[arg(long, global = true)]
+    json: bool,
+
+    /// Non-interactive subcommands used by the SimDeck app.
+    #[command(subcommand)]
+    cmd: Option<emu::cli::Cmd>,
 }
 
 /// Main entry point for the Emu application.
@@ -106,6 +114,12 @@ async fn main() -> Result<()> {
 
     if cli.check {
         return run_local_check().await;
+    }
+
+    // A subcommand never touches the terminal: it prints one JSON envelope
+    // and exits with 0 (ok), 1 (business error) or 2 (environment error).
+    if let Some(cmd) = cli.cmd {
+        std::process::exit(i32::from(emu::cli::run(cmd).await));
     }
 
     run_tui().await
