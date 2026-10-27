@@ -21,6 +21,29 @@ pub struct Response<T> {
     pub error: Option<ErrBody>,
 }
 
+/// A business error with the code the app switches on; commands return this
+/// instead of `anyhow::Error` so nothing has to parse messages twice.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CliError {
+    pub code: String,
+    pub message: String,
+    pub hint: Option<String>,
+}
+
+impl CliError {
+    pub fn new(code: &str, message: &str, hint: Option<&str>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.to_string(),
+            hint: hint.map(str::to_string),
+        }
+    }
+}
+
+pub fn emit_cli_err(error: &CliError) -> u8 {
+    emit_err(&error.code, &error.message, error.hint.as_deref())
+}
+
 /// Error codes that mean "this machine cannot do it", not "the request is
 /// wrong".
 const ENVIRONMENT_CODES: &[&str] = &[

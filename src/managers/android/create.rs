@@ -249,21 +249,41 @@ impl AndroidManager {
             ));
         }
 
-        let (tag, abi) = if let Some((found_tag, found_abi)) = self
-            .get_first_available_system_image(&config.version)
-            .await?
-        {
-            (found_tag, found_abi)
-        } else {
-            let default_tag = config
-                .additional_options
-                .get("tag")
-                .map_or("google_apis_playstore", |value| value.as_str());
-            let default_abi = config
-                .additional_options
-                .get("abi")
-                .map_or(defaults::default_abi(), |value| value.as_str());
-            (default_tag.to_string(), default_abi.to_string())
+        // A caller that names a tag and ABI (the JSON CLI) must get exactly
+        // that image; only fall back to "first image of this API" otherwise.
+        let requested = match (
+            config.additional_options.get("tag"),
+            config.additional_options.get("abi"),
+        ) {
+            (Some(tag), Some(abi)) => Some((tag.clone(), abi.clone())),
+            _ => None,
+        };
+        let (tag, abi) = match requested {
+            Some((tag, abi))
+                if self
+                    .check_system_image_available(&config.version, &tag, &abi)
+                    .await
+                    .unwrap_or(false) =>
+            {
+                (tag, abi)
+            }
+            _ => match self
+                .get_first_available_system_image(&config.version)
+                .await?
+            {
+                Some((found_tag, found_abi)) => (found_tag, found_abi),
+                None => {
+                    let default_tag = config
+                        .additional_options
+                        .get("tag")
+                        .map_or("google_apis_playstore", |value| value.as_str());
+                    let default_abi = config
+                        .additional_options
+                        .get("abi")
+                        .map_or(defaults::default_abi(), |value| value.as_str());
+                    (default_tag.to_string(), default_abi.to_string())
+                }
+            },
         };
 
         let package_path = format!("system-images;android-{};{};{}", config.version, tag, abi);

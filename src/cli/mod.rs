@@ -5,10 +5,13 @@
 
 pub mod catalog;
 pub mod check;
+pub mod config_ini;
+pub mod create;
 pub mod json;
 
 use clap::{Args, Subcommand};
-use json::{emit_err, emit_ok};
+use create::CreateRequest;
+use json::{emit_cli_err, emit_err, emit_ok};
 
 #[derive(Debug, Subcommand)]
 pub enum Cmd {
@@ -49,6 +52,36 @@ pub enum AvdSub {
         #[arg(long)]
         api: u32,
     },
+    /// Create an AVD from a hardware profile and an installed system image.
+    Create(CreateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CreateArgs {
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub api: u32,
+    #[arg(long)]
+    pub tag: String,
+    #[arg(long)]
+    pub abi: String,
+    #[arg(long)]
+    pub device: String,
+    /// RAM in MB.
+    #[arg(long)]
+    pub ram: Option<u32>,
+    /// Data partition size, e.g. 8G.
+    #[arg(long)]
+    pub storage: Option<String>,
+    /// Back camera source (virtualscene, emulated, none or a webcam id).
+    #[arg(long)]
+    pub camera: Option<String>,
+    /// portrait or landscape.
+    #[arg(long)]
+    pub orientation: Option<String>,
+    #[arg(long)]
+    pub keyboard: Option<bool>,
 }
 
 #[derive(Debug, Args)]
@@ -85,6 +118,23 @@ pub async fn run(cmd: Cmd) -> u8 {
             AvdSub::Profiles => match catalog::profiles().await {
                 Ok(rows) => emit_ok(rows),
                 Err(e) => android_err(e),
+            },
+            AvdSub::Create(args) => match create::create(CreateRequest {
+                name: args.name,
+                api: args.api,
+                tag: args.tag,
+                abi: args.abi,
+                device: args.device,
+                ram_mb: args.ram,
+                storage: args.storage,
+                camera: args.camera,
+                orientation: args.orientation,
+                keyboard: args.keyboard,
+            })
+            .await
+            {
+                Ok(created) => emit_ok(created),
+                Err(e) => emit_cli_err(&e),
             },
             AvdSub::Tags { api } => match catalog::tags(api).await {
                 Ok(rows) => emit_ok(rows),
