@@ -7,7 +7,9 @@ pub mod catalog;
 pub mod check;
 pub mod config_ini;
 pub mod create;
+pub mod images;
 pub mod json;
+pub mod progress;
 
 use clap::{Args, Subcommand};
 use create::CreateRequest;
@@ -23,6 +25,33 @@ pub enum Cmd {
     Ios(IosCmd),
     /// SDK license state.
     Licenses(LicensesCmd),
+    /// System images and iOS runtimes.
+    Images(ImagesCmd),
+}
+
+#[derive(Debug, Args)]
+pub struct ImagesCmd {
+    #[command(subcommand)]
+    pub cmd: ImagesSub,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ImagesSub {
+    /// Installed and downloadable images.
+    List {
+        #[arg(long, default_value = "android")]
+        platform: String,
+    },
+    /// Install a package, streaming NDJSON progress.
+    Install {
+        #[arg(long)]
+        package: String,
+    },
+    /// Uninstall a package.
+    Uninstall {
+        #[arg(long)]
+        package: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -138,6 +167,8 @@ pub struct LicensesCmd {
 pub enum LicensesSub {
     /// Whether every SDK license has been accepted.
     Status,
+    /// Accept every SDK license, streaming NDJSON progress.
+    Accept,
 }
 
 /// Runs one subcommand and returns its process exit code.
@@ -204,7 +235,19 @@ pub async fn run(cmd: Cmd) -> u8 {
                 Err(e) => ios_err(e),
             },
         },
+        Cmd::Images(ImagesCmd { cmd }) => match cmd {
+            ImagesSub::List { platform } => match images::list(&platform).await {
+                Ok(rows) => emit_ok(rows),
+                Err(e) => emit_cli_err(&e),
+            },
+            ImagesSub::Install { package } => images::install(&package).await,
+            ImagesSub::Uninstall { package } => match images::uninstall(&package).await {
+                Ok(value) => emit_ok(value),
+                Err(e) => emit_cli_err(&e),
+            },
+        },
         Cmd::Licenses(LicensesCmd { cmd }) => match cmd {
+            LicensesSub::Accept => images::accept_licenses().await,
             LicensesSub::Status => match crate::managers::AndroidManager::new() {
                 Ok(manager) => emit_ok(catalog::license_state(manager.android_home())),
                 Err(e) => emit_err(

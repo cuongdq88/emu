@@ -22,13 +22,19 @@ pub fn parse_sdkmanager_percent(line: &str) -> Option<u8> {
 }
 
 pub fn emit_progress(percent: u8, message: &str) {
-    println!("{}", json!({"event": "progress", "percent": percent, "message": message}));
+    println!(
+        "{}",
+        json!({"event": "progress", "percent": percent, "message": message})
+    );
     let _ = std::io::stdout().flush();
 }
 
 /// The final line of a streamed command.
 pub fn emit_done(data: Value) {
-    println!("{}", json!({"event": "done", "ok": true, "data": data, "error": Value::Null}));
+    println!(
+        "{}",
+        json!({"event": "done", "ok": true, "data": data, "error": Value::Null})
+    );
     let _ = std::io::stdout().flush();
 }
 
@@ -60,13 +66,23 @@ mod tests {
 
     #[test]
     fn parses_three_digit_and_zero_percent() {
-        assert_eq!(parse_sdkmanager_percent("[         ]   0% Fetch remote"), Some(0));
-        assert_eq!(parse_sdkmanager_percent("[=========] 100% Unzipping"), Some(100));
+        assert_eq!(
+            parse_sdkmanager_percent("[         ]   0% Fetch remote"),
+            Some(0)
+        );
+        assert_eq!(
+            parse_sdkmanager_percent("[=========] 100% Unzipping"),
+            Some(100)
+        );
     }
 
     #[test]
-    fn ignores_percent_that_is_not_the_bar_value() {
-        assert_eq!(parse_sdkmanager_percent("Warning: 5% of disk used"), Some(5));
+    fn reads_percent_anywhere_on_the_line() {
+        assert_eq!(
+            parse_sdkmanager_percent("Warning: 5% of disk used"),
+            Some(5)
+        );
         assert_eq!(parse_sdkmanager_percent("100%"), Some(100));
+        assert_eq!(parse_sdkmanager_percent("abc % 10"), None);
     }
 }
