@@ -55,14 +55,16 @@ impl AndroidManager {
         for line in output.lines() {
             let trimmed = line.trim();
 
-            if trimmed.starts_with("Installed packages:") {
+            // cmdline-tools 23 prints "Available packages:" (lowercase p).
+            let lower = trimmed.to_lowercase();
+            if lower.starts_with("installed packages:") {
                 in_installed_section = true;
                 continue;
             }
 
             if in_installed_section
-                && (trimmed.starts_with("Available Packages:")
-                    || trimmed.starts_with("Available Updates:"))
+                && (lower.starts_with("available packages:")
+                    || lower.starts_with("available updates:"))
             {
                 in_installed_section = false;
                 continue;

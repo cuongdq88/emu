@@ -494,7 +494,28 @@ impl AndroidManager {
                 ],
             )
             .await?;
-        Ok(output)
+        Ok(Self::normalize_sdkmanager_output(output))
+    }
+
+    /// cmdline-tools 23 prints `system-images/android-36.1/tag/abi`; every
+    /// parser here (and `avdmanager`) uses `;`, so rewrite the package id.
+    pub(crate) fn normalize_sdkmanager_output(output: String) -> String {
+        output
+            .lines()
+            .map(|line| {
+                let trimmed = line.trim_start();
+                if !trimmed.starts_with("system-images/") {
+                    return line.to_string();
+                }
+                let indent = &line[..line.len() - trimmed.len()];
+                let (package_id, rest) = match trimmed.find(char::is_whitespace) {
+                    Some(index) => trimmed.split_at(index),
+                    None => (trimmed, ""),
+                };
+                format!("{indent}{}{rest}", package_id.replace('/', ";"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     pub(crate) async fn get_sdkmanager_verbose_output(&self) -> Result<String> {

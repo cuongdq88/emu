@@ -39,7 +39,7 @@ impl AndroidManager {
         Ok(api_levels)
     }
 
-    fn parse_api_levels_from_output(&self, output_str: &str) -> Vec<ApiLevel> {
+    pub(super) fn parse_api_levels_from_output(&self, output_str: &str) -> Vec<ApiLevel> {
         let mut api_levels_map: std::collections::HashMap<u32, ApiLevel> =
             std::collections::HashMap::new();
         let mut in_installed_section = false;
@@ -48,10 +48,12 @@ impl AndroidManager {
         for line in output_str.lines() {
             let line = line.trim();
 
-            if line.contains("Installed packages") || line.contains("Installed Packages") {
+            // cmdline-tools 23 prints "Available packages:" (lowercase p).
+            let lower = line.to_lowercase();
+            if lower.contains("installed packages") {
                 in_installed_section = true;
                 continue;
-            } else if line.contains("Available Packages") || line.contains("Available Updates") {
+            } else if lower.contains("available packages") || lower.contains("available updates") {
                 in_installed_section = false;
                 continue;
             }

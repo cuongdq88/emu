@@ -1559,3 +1559,57 @@ async fn test_get_available_api_levels() {
         None => env::remove_var("ANDROID_HOME"),
     }
 }
+
+#[test]
+fn normalizes_new_sdkmanager_package_separator() {
+    let raw = "Installed packages:\n  system-images/android-36.1/google_apis_playstore/arm64-v8a  4.0.0  Google Play ARM\n";
+    let out = AndroidManager::normalize_sdkmanager_output(raw.to_string());
+    assert!(out.contains("system-images;android-36.1;google_apis_playstore;arm64-v8a"));
+    assert!(out.contains("  4.0.0  Google Play ARM"));
+}
+
+#[test]
+fn keeps_legacy_semicolon_package_ids() {
+    let raw = "  system-images;android-35;google_apis;arm64-v8a  4.0.0  x\n";
+    assert_eq!(
+        AndroidManager::normalize_sdkmanager_output(raw.to_string()),
+        raw.trim_end()
+    );
+}
+
+#[tokio::test]
+async fn test_available_packages_section_is_not_installed() {
+    let _env_lock = acquire_test_env_lock().await;
+    let temp_dir = setup_test_android_sdk();
+    let _android_home = EnvVarGuard::set("ANDROID_HOME", temp_dir.path().as_os_str());
+    let manager = AndroidManager::with_executor(Arc::new(MockCommandExecutor::new())).unwrap();
+
+    // cmdline-tools 23 prints "Available packages:" (lowercase p).
+    let output = "Installed packages:\n  system-images;android-36;google_apis_playstore;arm64-v8a 7.0.0 x\nAvailable packages:\n  system-images;android-35;google_apis;arm64-v8a 4.0.0 y\n";
+    let levels = manager.parse_api_levels_from_output(output);
+
+    let api35 = levels.iter().find(|level| level.api == 35).unwrap();
+    assert!(api35.variants.iter().all(|variant| !variant.is_installed));
+    let api36 = levels.iter().find(|level| level.api == 36).unwrap();
+    assert!(api36.variants.iter().any(|variant| variant.is_installed));
+}
+
+#[tokio::test]
+async fn test_available_system_images_exclude_available_section() {
+    let _env_lock = acquire_test_env_lock().await;
+    let temp_dir = setup_test_android_sdk();
+    let _android_home = EnvVarGuard::set("ANDROID_HOME", temp_dir.path().as_os_str());
+    let output = "Installed packages:\n  system-images;android-36;google_apis_playstore;arm64-v8a 7.0.0 x\nAvailable packages:\n  system-images;android-35;google_apis;arm64-v8a 4.0.0 y\n";
+    let mock_executor = MockCommandExecutor::new().with_success(
+        "sdkmanager",
+        &["--list", "--verbose", "--include_obsolete"],
+        output,
+    );
+    let manager = AndroidManager::with_executor(Arc::new(mock_executor)).unwrap();
+
+    let images = manager.list_available_system_images().await.unwrap();
+    assert_eq!(
+        images,
+        vec!["system-images;android-36;google_apis_playstore;arm64-v8a".to_string()]
+    );
+}
