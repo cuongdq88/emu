@@ -8,6 +8,7 @@ pub mod check;
 pub mod config_ini;
 pub mod create;
 pub mod images;
+pub mod ios;
 pub mod json;
 pub mod progress;
 
@@ -155,6 +156,15 @@ pub enum IosSub {
     DeviceTypes,
     /// Installed simulator runtimes.
     Runtimes,
+    /// Create a simulator from an installed runtime.
+    Create {
+        #[arg(long)]
+        device_type: String,
+        #[arg(long)]
+        runtime: String,
+        #[arg(long)]
+        name: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -229,6 +239,14 @@ pub async fn run(cmd: Cmd) -> u8 {
             IosSub::DeviceTypes => match catalog::ios_device_types().await {
                 Ok(rows) => emit_ok(rows),
                 Err(e) => ios_err(e),
+            },
+            IosSub::Create {
+                device_type,
+                runtime,
+                name,
+            } => match ios::create(&device_type, &runtime, &name).await {
+                Ok(created) => emit_ok(created),
+                Err(e) => emit_cli_err(&e),
             },
             IosSub::Runtimes => match catalog::ios_runtimes().await {
                 Ok(rows) => emit_ok(rows),

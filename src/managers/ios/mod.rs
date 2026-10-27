@@ -310,6 +310,25 @@ impl IosManager {
     // These helper methods remain in the inherent impl block as they are specific to IosManager's way of handling things
     // and not directly part of the DeviceManager trait's public API contract for all managers.
 
+    /// Creates a simulator and returns its UDID (simctl echoes it on one
+    /// line).
+    pub async fn create_simulator(
+        &self,
+        name: &str,
+        device_type: &str,
+        runtime: &str,
+    ) -> Result<String> {
+        let output = self
+            .command_executor
+            .run(
+                Path::new(XCRUN),
+                &[SIMCTL, "create", name, device_type, runtime],
+            )
+            .await
+            .context(format!("Failed to create simulator '{name}'"))?;
+        Ok(output.trim().to_string())
+    }
+
     pub async fn erase_device(&self, udid: &str) -> Result<()> {
         self.command_executor
             .run(Path::new(XCRUN), &[SIMCTL, "erase", udid])
