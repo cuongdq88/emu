@@ -83,26 +83,14 @@ fn dir_size(path: &Path) -> u64 {
 }
 
 pub fn config_patch(request: &CreateRequest) -> Vec<(String, String)> {
-    let mut patch = Vec::new();
-    if let Some(ram) = request.ram_mb {
-        patch.push(("hw.ramSize".to_string(), ram.to_string()));
-    }
-    if let Some(storage) = &request.storage {
-        patch.push(("disk.dataPartition.size".to_string(), storage.clone()));
-    }
-    if let Some(camera) = &request.camera {
-        patch.push(("hw.camera.back".to_string(), camera.clone()));
-    }
-    if let Some(orientation) = &request.orientation {
-        patch.push(("hw.initialOrientation".to_string(), orientation.clone()));
-    }
-    if let Some(keyboard) = request.keyboard {
-        patch.push((
-            "hw.keyboard".to_string(),
-            if keyboard { "yes" } else { "no" }.to_string(),
-        ));
-    }
-    patch
+    config_ini::edit_patch(&config_ini::EditFields {
+        ram_mb: request.ram_mb,
+        storage: request.storage.clone(),
+        camera: request.camera.clone(),
+        orientation: request.orientation.clone(),
+        keyboard: request.keyboard,
+        sdcard: None,
+    })
 }
 
 /// `$ANDROID_AVD_HOME`, else `~/.android/avd`, else where avdmanager wrote.

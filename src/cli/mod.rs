@@ -54,6 +54,36 @@ pub enum AvdSub {
     },
     /// Create an AVD from a hardware profile and an installed system image.
     Create(CreateArgs),
+    /// Print an AVD's config.ini and the fields the Edit sheet may change.
+    Show {
+        #[arg(long)]
+        name: String,
+    },
+    /// Change the editable fields of a stopped AVD.
+    Update(UpdateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct UpdateArgs {
+    #[arg(long)]
+    pub name: String,
+    /// RAM in MB.
+    #[arg(long)]
+    pub ram: Option<u32>,
+    /// Data partition size, e.g. 8G.
+    #[arg(long)]
+    pub storage: Option<String>,
+    /// Back camera source (virtualscene, emulated, none or a webcam id).
+    #[arg(long)]
+    pub camera: Option<String>,
+    /// portrait or landscape.
+    #[arg(long)]
+    pub orientation: Option<String>,
+    #[arg(long)]
+    pub keyboard: Option<bool>,
+    /// SD card size, e.g. 512M, or "none".
+    #[arg(long)]
+    pub sdcard: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -136,6 +166,24 @@ pub async fn run(cmd: Cmd) -> u8 {
                 Ok(created) => emit_ok(created),
                 Err(e) => emit_cli_err(&e),
             },
+            AvdSub::Show { name } => match config_ini::show(&name) {
+                Ok(result) => emit_ok(result),
+                Err(e) => emit_cli_err(&e),
+            },
+            AvdSub::Update(args) => {
+                let fields = config_ini::EditFields {
+                    ram_mb: args.ram,
+                    storage: args.storage,
+                    camera: args.camera,
+                    orientation: args.orientation,
+                    keyboard: args.keyboard,
+                    sdcard: args.sdcard,
+                };
+                match config_ini::update(&args.name, fields).await {
+                    Ok(result) => emit_ok(result),
+                    Err(e) => emit_cli_err(&e),
+                }
+            }
             AvdSub::Tags { api } => match catalog::tags(api).await {
                 Ok(rows) => emit_ok(rows),
                 Err(e) if e.to_string().contains("No system image information") => emit_err(
