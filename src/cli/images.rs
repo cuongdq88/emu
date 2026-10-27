@@ -134,7 +134,7 @@ fn sdkmanager_path() -> Result<std::path::PathBuf, CliError> {
 /// its stdout into NDJSON progress. Returns the collected stderr.
 async fn stream_sdkmanager(
     args: &[&str],
-    mut answer_licenses: bool,
+    answer_licenses: bool,
 ) -> Result<(bool, String), CliError> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
