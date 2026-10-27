@@ -3,18 +3,46 @@ use crate::constants::{env_vars, files, limits::SYSTEM_IMAGE_PARTS_REQUIRED};
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
+/// Resolves the SDK home: the environment wins, then the Android Studio
+/// default, then Homebrew's command-line tools cask. `exists` lets tests
+/// answer without touching the disk.
+pub(crate) fn resolve_android_home(
+    android_home: Option<String>,
+    sdk_root: Option<String>,
+    home: Option<String>,
+    exists: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    if let Some(path) = android_home.filter(|value| !value.trim().is_empty()) {
+        return Some(PathBuf::from(path));
+    }
+    if let Some(path) = sdk_root.filter(|value| !value.trim().is_empty()) {
+        return Some(PathBuf::from(path));
+    }
+    let home = home?;
+    [
+        format!("{home}/Library/Android/sdk"),
+        "/opt/homebrew/share/android-commandlinetools".to_string(),
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .find(|path| exists(path))
+}
+
 impl AndroidManager {
-    /// Locates the Android SDK home directory from environment variables.
+    /// Locates the Android SDK home directory.
     pub(super) fn find_android_home() -> Result<PathBuf> {
-        if let Ok(path) = std::env::var(env_vars::ANDROID_HOME) {
-            return Ok(PathBuf::from(path));
-        }
-
-        if let Ok(path) = std::env::var(env_vars::ANDROID_SDK_ROOT) {
-            return Ok(PathBuf::from(path));
-        }
-
-        bail!("Android SDK not found. Please set ANDROID_HOME or ANDROID_SDK_ROOT")
+        let resolved = resolve_android_home(
+            std::env::var(env_vars::ANDROID_HOME).ok(),
+            std::env::var(env_vars::ANDROID_SDK_ROOT).ok(),
+            std::env::var("HOME").ok(),
+            |path| path.exists(),
+        );
+        resolved.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Android SDK not found. Set ANDROID_HOME, or install it with: \
+                 brew install --cask android-commandlinetools"
+            )
+        })
     }
 
     /// Finds a specific tool within the Android SDK directory structure.

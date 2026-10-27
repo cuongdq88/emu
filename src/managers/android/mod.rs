@@ -283,7 +283,7 @@ mod discovery;
 mod install;
 mod lifecycle;
 mod parser;
-mod sdk;
+pub(crate) mod sdk;
 mod version;
 
 use crate::{

@@ -1613,3 +1613,36 @@ async fn test_available_system_images_exclude_available_section() {
         vec!["system-images;android-36;google_apis_playstore;arm64-v8a".to_string()]
     );
 }
+
+#[test]
+fn sdk_home_falls_back_to_the_studio_default() {
+    let resolved = crate::managers::android::sdk::resolve_android_home(
+        None,
+        None,
+        Some("/Users/x".to_string()),
+        |path| path == std::path::Path::new("/Users/x/Library/Android/sdk"),
+    );
+    assert_eq!(
+        resolved,
+        Some(std::path::PathBuf::from("/Users/x/Library/Android/sdk"))
+    );
+}
+
+#[test]
+fn sdk_home_prefers_the_environment() {
+    let resolved = crate::managers::android::sdk::resolve_android_home(
+        Some("/opt/sdk".to_string()),
+        None,
+        Some("/Users/x".to_string()),
+        |_| true,
+    );
+    assert_eq!(resolved, Some(std::path::PathBuf::from("/opt/sdk")));
+}
+
+#[test]
+fn sdk_home_is_none_when_nothing_exists() {
+    assert_eq!(
+        crate::managers::android::sdk::resolve_android_home(None, None, None, |_| false),
+        None
+    );
+}
