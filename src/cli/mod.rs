@@ -266,12 +266,12 @@ pub async fn run(cmd: Cmd) -> u8 {
         },
         Cmd::Licenses(LicensesCmd { cmd }) => match cmd {
             LicensesSub::Accept => images::accept_licenses().await,
-            LicensesSub::Status => match crate::managers::AndroidManager::new() {
-                Ok(manager) => emit_ok(catalog::license_state(manager.android_home())),
-                Err(e) => emit_err(
+            LicensesSub::Status => match crate::managers::android::sdk::sdk_home() {
+                Some(home) => emit_ok(catalog::license_state(&home)),
+                None => emit_err(
                     "sdk_not_found",
-                    &e.to_string(),
-                    Some("Install the Android SDK and set ANDROID_HOME"),
+                    "Android SDK not found",
+                    Some("brew install --cask android-commandlinetools"),
                 ),
             },
         },

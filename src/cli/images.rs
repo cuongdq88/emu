@@ -3,7 +3,7 @@
 
 use super::json::CliError;
 use super::progress;
-use crate::managers::AndroidManager;
+use crate::managers::android::sdk;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -71,12 +71,19 @@ pub async fn list(platform: &str) -> Result<Vec<ImageRow>, CliError> {
             .collect());
     }
 
-    let manager = AndroidManager::new()
-        .map_err(|e| CliError::new("sdk_not_found", &e.to_string(), Some("Set ANDROID_HOME")))?;
-    let output = manager
-        .get_sdkmanager_verbose_output()
+    let home = sdk::sdk_home().ok_or_else(|| {
+        CliError::new(
+            "sdk_not_found",
+            "Android SDK not found",
+            Some("brew install --cask android-commandlinetools"),
+        )
+    })?;
+    let sdkmanager = sdkmanager_path()?;
+    let output = crate::utils::command::CommandRunner::new()
+        .run(&sdkmanager, ["--list", "--verbose", "--include_obsolete"])
         .await
         .map_err(|e| CliError::new("tool_failed", &e.to_string(), None))?;
+    let output = crate::managers::AndroidManager::normalize_sdkmanager_output(output);
     let mut rows = Vec::new();
     let mut in_installed = false;
     for line in output.lines() {
@@ -97,8 +104,7 @@ pub async fn list(platform: &str) -> Result<Vec<ImageRow>, CliError> {
         }
         let size = if in_installed {
             let parts: Vec<&str> = package.split(';').collect();
-            let dir = manager
-                .android_home()
+            let dir = home
                 .join("system-images")
                 .join(format!(
                     "android-{}",
@@ -123,11 +129,21 @@ pub async fn list(platform: &str) -> Result<Vec<ImageRow>, CliError> {
     Ok(rows)
 }
 
-fn sdkmanager_path() -> Result<std::path::PathBuf, CliError> {
-    AndroidManager::new()
-        .map_err(|e| CliError::new("sdk_not_found", &e.to_string(), Some("Set ANDROID_HOME")))?
-        .sdkmanager_path()
-        .ok_or_else(|| CliError::new("tool_missing", "sdkmanager not found", None))
+pub fn sdkmanager_path() -> Result<std::path::PathBuf, CliError> {
+    let home = sdk::sdk_home().ok_or_else(|| {
+        CliError::new(
+            "sdk_not_found",
+            "Android SDK not found",
+            Some("brew install --cask android-commandlinetools"),
+        )
+    })?;
+    sdk::tool_in(&home, "sdkmanager").ok_or_else(|| {
+        CliError::new(
+            "tool_missing",
+            "sdkmanager not found in the Android SDK",
+            Some("brew install --cask android-commandlinetools"),
+        )
+    })
 }
 
 /// Runs `sdkmanager <args>`, answering license prompts with `y`, and turns
@@ -241,12 +257,19 @@ pub async fn install(package: &str) -> u8 {
 }
 
 pub async fn uninstall(package: &str) -> Result<serde_json::Value, CliError> {
-    let manager = AndroidManager::new()
-        .map_err(|e| CliError::new("sdk_not_found", &e.to_string(), Some("Set ANDROID_HOME")))?;
-    manager
-        .uninstall_system_image(package)
+    let sdkmanager = sdkmanager_path()?;
+    let output = tokio::process::Command::new(&sdkmanager)
+        .args(["--uninstall", package])
+        .output()
         .await
         .map_err(|e| CliError::new("tool_failed", &e.to_string(), None))?;
+    if !output.status.success() {
+        return Err(CliError::new(
+            "tool_failed",
+            String::from_utf8_lossy(&output.stderr).trim(),
+            None,
+        ));
+    }
     Ok(serde_json::json!({"package": package, "removed": true}))
 }
 
@@ -256,9 +279,8 @@ pub async fn accept_licenses() -> u8 {
     progress::emit_progress(0, "Accepting SDK licenses");
     match stream_sdkmanager(&["--licenses"], true).await {
         Ok((success, stderr)) => {
-            let accepted = AndroidManager::new()
-                .map(|manager| crate::cli::catalog::license_state(manager.android_home()))
-                .map(|state| state.accepted)
+            let accepted = sdk::sdk_home()
+                .map(|home| crate::cli::catalog::license_state(&home).accepted)
                 .unwrap_or(false);
             if success && accepted {
                 progress::emit_done(serde_json::json!({"accepted": true}));

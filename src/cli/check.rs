@@ -3,7 +3,7 @@
 
 use super::json::{emit_err, ok_value, print_value};
 use crate::constants::commands::ADB;
-use crate::managers::AndroidManager;
+use crate::managers::android::sdk;
 use crate::utils::command::CommandRunner;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -28,13 +28,18 @@ pub struct EnvReport {
     pub xcode: XcodeInfo,
     pub disk_free_bytes: Option<u64>,
     pub licenses_accepted: bool,
+    /// True when the emulator, avdmanager and adb are all present: the app
+    /// can create and boot AVDs without further setup.
+    pub ready: bool,
+    /// Tools the user still has to install, for the first-run setup.
+    pub missing: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Tools {
     pub adb: Option<ToolInfo>,
     pub emulator: Option<ToolInfo>,
-    pub avdmanager: ToolInfo,
+    pub avdmanager: Option<ToolInfo>,
     pub sdkmanager: Option<ToolInfo>,
 }
 
@@ -73,30 +78,46 @@ pub async fn disk_free_bytes(exec: &CommandRunner, path: &Path) -> Option<u64> {
 }
 
 pub async fn run() -> u8 {
-    let manager = match AndroidManager::new() {
-        Ok(manager) => manager,
-        Err(e) => {
-            return emit_err(
-                "sdk_not_found",
-                &e.to_string(),
-                Some("Install the Android SDK and set ANDROID_HOME"),
-            )
-        }
+    let Some(sdk_path) = sdk::sdk_home() else {
+        return emit_err(
+            "sdk_not_found",
+            "Android SDK not found",
+            Some("brew install --cask android-commandlinetools"),
+        );
     };
-    let sdk_path = manager.android_home().to_path_buf();
     let exec = CommandRunner::new();
 
-    let adb_path = sdk_path.join("platform-tools").join(ADB);
-    let adb = tool(&exec, adb_path, &["--version"]).await;
-    let emulator = tool(&exec, manager.emulator_path().to_path_buf(), &["-version"]).await;
-    let avdmanager = ToolInfo {
-        path: manager.avdmanager_path().display().to_string(),
-        version: cmdline_tools_version(manager.avdmanager_path()),
-    };
-    let sdkmanager = match manager.sdkmanager_path() {
+    let adb = match sdk::tool_in(&sdk_path, ADB) {
         Some(path) => tool(&exec, path, &["--version"]).await,
         None => None,
     };
+    let emulator = match sdk::tool_in(&sdk_path, "emulator") {
+        Some(path) => tool(&exec, path, &["-version"]).await,
+        None => None,
+    };
+    let avdmanager = match sdk::tool_in(&sdk_path, "avdmanager") {
+        Some(path) => Some(ToolInfo {
+            version: cmdline_tools_version(&path),
+            path: path.display().to_string(),
+        }),
+        None => None,
+    };
+    let sdkmanager = match sdk::tool_in(&sdk_path, "sdkmanager") {
+        Some(path) => tool(&exec, path, &["--version"]).await,
+        None => None,
+    };
+
+    let mut missing = Vec::new();
+    if adb.is_none() {
+        missing.push("platform-tools".to_string());
+    }
+    if emulator.is_none() {
+        missing.push("emulator".to_string());
+    }
+    if avdmanager.is_none() {
+        missing.push("cmdline-tools".to_string());
+    }
+    let ready = missing.is_empty();
 
     let report = EnvReport {
         sdk_path: sdk_path.display().to_string(),
@@ -110,6 +131,8 @@ pub async fn run() -> u8 {
         xcode: xcode(&exec).await,
         disk_free_bytes: disk_free_bytes(&exec, &sdk_path).await,
         licenses_accepted: licenses_accepted(&sdk_path),
+        ready,
+        missing,
     };
     print_value(&ok_value(report));
     0

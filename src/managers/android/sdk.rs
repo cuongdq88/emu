@@ -28,6 +28,30 @@ pub(crate) fn resolve_android_home(
     .find(|path| exists(path))
 }
 
+/// SDK home from the real process environment (see [`resolve_android_home`]).
+pub(crate) fn sdk_home() -> Option<PathBuf> {
+    resolve_android_home(
+        std::env::var(env_vars::ANDROID_HOME).ok(),
+        std::env::var(env_vars::ANDROID_SDK_ROOT).ok(),
+        std::env::var("HOME").ok(),
+        |path| path.exists(),
+    )
+}
+
+/// Finds a tool the way the SDK lays it out: cmdline-tools/latest, then
+/// tools/, then the SDK root. `emulator` and `adb` live in their own dirs.
+pub(crate) fn tool_in(home: &Path, tool: &str) -> Option<PathBuf> {
+    let candidates = [
+        home.join(files::android::CMDLINE_TOOLS_LATEST_BIN)
+            .join(tool),
+        home.join(files::android::TOOLS_BIN).join(tool),
+        home.join(files::android::EMULATOR_DIR).join(tool),
+        home.join("platform-tools").join(tool),
+        home.join(tool),
+    ];
+    candidates.into_iter().find(|path| path.exists())
+}
+
 impl AndroidManager {
     /// Locates the Android SDK home directory.
     pub(super) fn find_android_home() -> Result<PathBuf> {
@@ -129,5 +153,33 @@ impl AndroidManager {
         }
 
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod home_tests {
+    use super::*;
+
+    #[test]
+    fn tool_in_prefers_cmdline_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        std::fs::create_dir_all(home.join("cmdline-tools/latest/bin")).unwrap();
+        std::fs::write(home.join("cmdline-tools/latest/bin/sdkmanager"), "").unwrap();
+        std::fs::write(home.join("sdkmanager"), "").unwrap();
+
+        let found = tool_in(home, "sdkmanager").unwrap();
+        assert!(found.ends_with("cmdline-tools/latest/bin/sdkmanager"));
+    }
+
+    #[test]
+    fn tool_in_finds_platform_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        std::fs::create_dir_all(home.join("platform-tools")).unwrap();
+        std::fs::write(home.join("platform-tools/adb"), "").unwrap();
+
+        assert!(tool_in(home, "adb").is_some());
+        assert!(tool_in(home, "emulator").is_none());
     }
 }
